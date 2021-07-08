@@ -1,0 +1,5 @@
+{
+    "data": "/home/admin/analysis/fastq_data/",
+    "genome": "/home/admin/analysis/reference/hg38.fa",
+    "reference": "/home/admin/analysis/reference/hg38.knownGene.gtf.gz",    
+}

@@ -1,0 +1,73 @@
+import os
+
+configfile:
+    "config.json"
+
+SAMPLES, = glob_wildcards(config['data'] + "{sample, Donor.+}.cleaned.fastq")
+
+indexes = "hisat2_indexes/" + os.path.basename(os.path.splitext(config['genome'])[0])
+
+rule all:
+    input: expand("htseq_counts/{sample}.htseq_counts.txt", sample=SAMPLES)
+    output: touch(".status")
+
+rule htseq_counts:
+    input: "alignment/{sample}/{sample}.rmdup.bam"
+    output: "htseq_counts/{sample}.htseq_counts.txt"
+    conda: "htseq.yml"
+    shell: "htseq-count -f bam {input} config['reference'] > {output}"
+
+
+rule markdup:
+    input: "alignment/{sample}/{sample}.possorted.bam"
+    output: temp("alignment/{sample}/{sample}.rmdup.bam")
+    conda: "samtools.yml"
+    shell: "samtools markdup -r -s -@ 4 {input} {output}"
+
+
+rule sort_by_position:
+    input: "alignment/{sample}/{sample}.fixmate.bam"
+    output: temp("alignment/{sample}/{sample}.possorted.bam")
+    conda: "samtools.yml"
+    shell: "samtools sort -@ 4 -o {output} {input}"
+
+
+rule fixmate:
+    input: "alignment/{sample}/{sample}.namesorted.bam"
+    output: temp("alignment/{sample}/{sample}.fixmate.bam")
+    conda: "samtools.yml"
+    shell: "samtools fixmate -m -@ 4 {input} {output}"
+
+
+rule sort_by_name:
+    input: "alignment/{sample}/{sample}.bam"
+    output: temp("alignment/{sample}/{sample}.namesorted.bam")
+    conda: "samtools.yml"
+    shell: "samtools sort -n -@ 4 -o {output} {input}"
+
+
+rule sam_to_bam:
+    input: "alignment/{sample}/{sample}.sam"
+    output: temp("alignment/{sample}/{sample}.bam")
+    conda: "samtools.yml"
+    shell: "samtools view -@ 4 -bS {input} > {output}"
+
+
+rule align_reads:
+    input: fastq = "fastq_data/{sample}.cleaned.fastq",
+           indexes = indexes
+    output: sam = temp("alignment/{sample}/{sample}.sam"),
+            summary = "alignment/{sample}/{sample}.hisat2.summary"
+    conda: "hisat2.yml"
+    shell: "hisat2 -p 4 --no-softclip --very-sensitive --summary-file {output.summary} -x {input.indexes} -U {input.fastq} -S {output.sam}"
+
+
+rule mkdir:
+    input: "alignment/{sample}"
+    shell: "mkdir {input}"
+
+rule index_genome:
+    input: config['genome']
+    output: indexes
+    conda: "hisat2.yml"
+    shell: "hisat2-build -p 4 {input} {output}"
